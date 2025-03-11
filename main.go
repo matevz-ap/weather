@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -9,27 +10,70 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	res, err := http.Get("https://api.open-meteo.com/v1/forecast?latitude=46.0511&longitude=14.5051&hourly=temperature_2m")
+type Response struct {
+	Results []Location
+}
+
+type Location struct {
+	Latitude  float64
+	Longitude float64
+}
+
+func geocode(location string) (float64, float64, error) {
+	url := fmt.Sprintf("https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1&language=en&format=json", location)
+	res, err := http.Get(url)
+
 	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
-		return
+		return 0, 0, err
 	}
 
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Error reading response body"))
-		return
+		return 0, 0, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write(body)
+	var response Response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if len(response.Results) == 0 {
+		return 0, 0, err
+	}
+
+	return response.Results[0].Latitude, response.Results[0].Longitude, nil
+}
+
+func location_weather(lat float64, long float64) (string, error) {
+	url := fmt.Sprintf("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f&hourly=temperature_2m", lat, long)
+	res, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
+}
+
+func weather(location string) (string, error) {
+	long, lat, err := geocode(location)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+	weather_data, err := location_weather(lat, long)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+	return weather_data, nil
 }
 
 func failOnError(err error, msg string) {
@@ -47,31 +91,38 @@ func main() {
 	failOnError(err, "Failed to open a channel")
 	defer ch.Close()
 
-	// We create a Queue to send the message to.
 	q, err := ch.QueueDeclare(
-		"golang-queue", // name
-		false,          // durable
-		false,          // delete when unused
-		false,          // exclusive
-		false,          // no-wait
-		nil,            // arguments
+		"weather", // name
+		false,     // durable
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
-	// We set the payload for the message.
-	body := "Golang is awesome - Keep Moving Forward!"
-	err = ch.Publish(
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(body),
-		})
-	// If there is an error publishing the message, a log will be displayed in the terminal.
-	failOnError(err, "Failed to publish a message")
-	log.Printf(" [x] Congrats, sending message: %s", body)
-	http.HandleFunc("/weather", handler)
-	http.ListenAndServe(":8080", nil)
+	msgs, err := ch.Consume(
+		q.Name, // queue
+		"",     // consumer
+		true,   // auto-ack
+		false,  // exclusive
+		false,  // no-local
+		false,  // no-wait
+		nil,    // args
+	)
+	failOnError(err, "Failed to register a consumer")
+	var forever chan struct{}
+	go func() {
+		for d := range msgs {
+			log.Printf("Fetching weather for: %s", d.Body)
+			data, err := weather(string(d.Body))
+			if err != nil {
+				log.Println("problems with weather")
+			}
+			log.Println(data)
+		}
+	}()
+
+	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+	<-forever
 }
