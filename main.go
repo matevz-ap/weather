@@ -91,7 +91,18 @@ func main() {
 	failOnError(err, "Failed to open a channel")
 	defer ch.Close()
 
-	q, err := ch.QueueDeclare(
+	err = ch.ExchangeDeclare(
+		"weather", // name
+		"fanout",  // type
+		true,      // durable
+		false,     // auto-deleted
+		false,     // internal
+		false,     // no-wait
+		nil,       // arguments
+	)
+	failOnError(err, "Failed to declare an exchange")
+
+	request_queue, err := ch.QueueDeclare(
 		"weather", // name
 		false,     // durable
 		false,     // delete when unused
@@ -101,14 +112,33 @@ func main() {
 	)
 	failOnError(err, "Failed to declare a queue")
 
+	_, err = ch.QueueDeclare(
+		"weather_responses", // name
+		false,               // durable
+		false,               // delete when unused
+		false,               // exclusive
+		false,               // no-wait
+		nil,                 // arguments
+	)
+	failOnError(err, "Failed to declare a queue")
+
+	err = ch.QueueBind(
+		request_queue.Name, // queue name
+		"",                 // routing key
+		"weather",          // exchange
+		false,
+		nil,
+	)
+	failOnError(err, "Failed to bind a queue")
+
 	msgs, err := ch.Consume(
-		q.Name, // queue
-		"",     // consumer
-		true,   // auto-ack
-		false,  // exclusive
-		false,  // no-local
-		false,  // no-wait
-		nil,    // args
+		request_queue.Name, // queue
+		"",                 // consumer
+		true,               // auto-ack
+		false,              // exclusive
+		false,              // no-local
+		false,              // no-wait
+		nil,                // args
 	)
 	failOnError(err, "Failed to register a consumer")
 	var forever chan struct{}
@@ -119,7 +149,18 @@ func main() {
 			if err != nil {
 				log.Println("problems with weather")
 			}
-			log.Println(data)
+			err = ch.Publish(
+				"",
+				"weather_responses",
+				false,
+				false,
+				amqp.Publishing{
+					DeliveryMode: amqp.Persistent,
+					ContentType:  "application/json",
+					Body:         []byte(data),
+				},
+			)
+			failOnError(err, "Failed to publish results")
 		}
 	}()
 
