@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/valkey-io/valkey-go"
 )
 
 type Response struct {
@@ -83,6 +85,14 @@ func failOnError(err error, msg string) {
 }
 
 func main() {
+	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{"valkey:6379"}})
+	if err != nil {
+		panic(err)
+	}
+	defer client.Close()
+
+	ctx := context.Background()
+
 	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
@@ -144,23 +154,40 @@ func main() {
 	var forever chan struct{}
 	go func() {
 		for d := range msgs {
-			log.Printf("Fetching weather for: %s", d.Body)
-			data, err := weather(string(d.Body))
+			location := string(d.Body)
+			log.Printf("Fetching weather for: %s", location)
+
+			cached, err := client.Do(ctx, client.B().Get().Key(location).Build()).ToString()
+			log.Printf("cached", cached)
 			if err != nil {
-				log.Println("problems with weather")
+				log.Print("problem with cache", err)
 			}
-			err = ch.Publish(
-				"",
-				"weather_responses",
-				false,
-				false,
-				amqp.Publishing{
-					DeliveryMode: amqp.Persistent,
-					ContentType:  "application/json",
-					Body:         []byte(data),
-				},
-			)
+
+			if cached != "valkey nil message" {
+				data, err := weather(location)
+				if err != nil {
+					log.Println("problems with weather")
+				}
+				err = client.Do(ctx, client.B().Set().Key(location).Value(data).Build()).Error()
+				if err != nil {
+					log.Print("problem with setting cache", err)
+				}
+			}
+
+			// err = ch.Publish(
+			// 	"",
+			// 	"weather_responses",
+			// 	false,
+			// 	false,
+			// 	amqp.Publishing{
+			// 		DeliveryMode: amqp.Persistent,
+			// 		ContentType:  "application/json",
+			// 		Body:         []byte(result),
+			// 	},
+			// )
+
 			failOnError(err, "Failed to publish results")
+
 		}
 	}()
 

@@ -15,6 +15,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+  valkey:
+    container_name: "valkey"
+    image: docker.io/bitnami/valkey:8.0
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - VALKEY_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    ports:
+      - '6379:6379'
+    volumes:
+      - 'valkey_data:/bitnami/valkey/data'
+    networks:
+      - valkey_net
   web:
     build: .
     ports:
@@ -22,9 +34,17 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      valkey:
+        condition: service_started
     networks:
       - rabbitmq_go_net
+      - valkey_net
 
+volumes:
+  valkey_data:
+    driver: local
 networks:
   rabbitmq_go_net:
+    driver: bridge
+  valkey_net:
     driver: bridge
