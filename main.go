@@ -122,16 +122,6 @@ func main() {
 	)
 	failOnError(err, "Failed to declare a queue")
 
-	_, err = ch.QueueDeclare(
-		"weather_responses", // name
-		false,               // durable
-		false,               // delete when unused
-		false,               // exclusive
-		false,               // no-wait
-		nil,                 // arguments
-	)
-	failOnError(err, "Failed to declare a queue")
-
 	err = ch.QueueBind(
 		request_queue.Name, // queue name
 		"",                 // routing key
@@ -155,42 +145,50 @@ func main() {
 	go func() {
 		for d := range msgs {
 			location := string(d.Body)
-			log.Printf("Fetching weather for: %s", location)
 
-			cached, err := client.Do(ctx, client.B().Get().Key(location).Build()).ToString()
-			log.Printf("cached", cached)
+			data, err := client.Do(ctx, client.B().Get().Key(location).Build()).ToString()
 			if err != nil {
-				log.Print("problem with cache", err)
+				log.Print("Problem with cache", err)
 			}
 
-			if cached != "valkey nil message" {
-				data, err := weather(location)
+			if data == "valkey nil message" {
+				data, err = weather(location)
 				if err != nil {
-					log.Println("problems with weather")
+					log.Println("Problems with weather", err)
 				}
 				err = client.Do(ctx, client.B().Set().Key(location).Value(data).Build()).Error()
 				if err != nil {
-					log.Print("problem with setting cache", err)
+					log.Print("Problem with setting cache", err)
 				}
+			} else {
+				log.Printf("Returning results from cache for: ", location)
 			}
 
-			// err = ch.Publish(
-			// 	"",
-			// 	"weather_responses",
-			// 	false,
-			// 	false,
-			// 	amqp.Publishing{
-			// 		DeliveryMode: amqp.Persistent,
-			// 		ContentType:  "application/json",
-			// 		Body:         []byte(result),
-			// 	},
-			// )
+			_, err = ch.QueueDeclare(
+				d.CorrelationId, // name
+				false,           // durable
+				true,            // delete when unused
+				false,           // exclusive
+				false,           // no-wait
+				nil,             // arguments
+			)
+			failOnError(err, "Failed to declare a queue")
+
+			err = ch.PublishWithContext(ctx,
+				"",
+				d.CorrelationId,
+				false,
+				false,
+				amqp.Publishing{
+					ContentType: "application/json",
+					Body:        []byte(data),
+				},
+			)
 
 			failOnError(err, "Failed to publish results")
-
 		}
 	}()
 
-	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+	log.Printf("[*] Waiting for messages.")
 	<-forever
 }

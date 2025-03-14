@@ -20,3 +20,8 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 test.go
+
+# Python
+.venv
+.mypy_cache
+__pycache__
