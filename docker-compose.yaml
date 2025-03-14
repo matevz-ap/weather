@@ -28,7 +28,9 @@ services:
     networks:
       - valkey_net
   web:
-    build: .
+    build:
+      dockerfile: build/Dockerfile
+      context: .
     ports:
       - "8080:8080"
     depends_on:
@@ -40,7 +42,8 @@ services:
       - rabbitmq_go_net
       - valkey_net
   flask:
-    build: python
+    build:
+      context: ./test
     ports:
       - "5000:5000"
     depends_on:
