@@ -12,4 +12,4 @@ RUN go build -o /app/cmd/weather /app/cmd/main.go
 
 EXPOSE 8080
 
-CMD ["cmd/app/main"]
+CMD ["/app/cmd/weather"]
