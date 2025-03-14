@@ -39,6 +39,14 @@ services:
     networks:
       - rabbitmq_go_net
       - valkey_net
+  flask:
+    build: python
+    ports:
+      - "5000:5000"
+    depends_on:
+      - web
+    networks:
+      - rabbitmq_go_net
 
 volumes:
   valkey_data:

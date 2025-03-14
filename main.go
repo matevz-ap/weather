@@ -148,10 +148,6 @@ func main() {
 
 			data, err := client.Do(ctx, client.B().Get().Key(location).Build()).ToString()
 			if err != nil {
-				log.Print("Problem with cache", err)
-			}
-
-			if data == "valkey nil message" {
 				data, err = weather(location)
 				if err != nil {
 					log.Println("Problems with weather", err)
@@ -161,7 +157,7 @@ func main() {
 					log.Print("Problem with setting cache", err)
 				}
 			} else {
-				log.Printf("Returning results from cache for: ", location)
+				log.Printf("Returning results from cache for: %s", location)
 			}
 
 			_, err = ch.QueueDeclare(
