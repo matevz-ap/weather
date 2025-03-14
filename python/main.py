@@ -1,6 +1,8 @@
 from flask import Flask
 import pika
 import uuid
+import requests
+from requests.auth import HTTPBasicAuth
 
 app = Flask(__name__)
 
@@ -26,3 +28,10 @@ def weather(location: str):
 def weather_results(uuid: str):
     method_frame, header_frame, body = channel.basic_get(queue=uuid, auto_ack=True)
     return body
+
+
+@app.route("/metrics")
+def metrics():
+    auth = HTTPBasicAuth("guest", "guest")
+    response = requests.get("http://localhost:15672/api/overview", auth=auth)
+    return response.json()
