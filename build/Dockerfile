@@ -8,8 +8,8 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o /app/main /app/main.go
+RUN go build -o /app/cmd/weather /app/cmd/main.go
 
 EXPOSE 8080
 
-CMD ["/app/main"]
+CMD ["cmd/app/main"]
