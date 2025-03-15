@@ -33,6 +33,23 @@ def weather(location: str) -> str:
     return corr_id
 
 
+@app.route("/weather/stress/<amount>")
+def wrather_stress(amount: str) -> dict:
+    uuids: list[str] = []
+    for _ in range(int(amount)):
+        corr_id: str = str(uuid.uuid4())
+        channel.basic_publish(
+            exchange="weather",
+            routing_key="",
+            properties=pika.BasicProperties(
+                correlation_id=corr_id,
+            ),
+            body="Ljubljana".encode(),
+        )
+        uuids.append(corr_id)
+    return {"uuids": uuids, "count": len(uuids)}
+
+
 @app.route("/weather/results/<uuid>")
 def weather_results(uuid: str) -> Response | dict:
     """
