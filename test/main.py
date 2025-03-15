@@ -16,6 +16,11 @@ channel: BlockingChannel = connection.channel()
 
 @app.route("/weather/<location>")
 def weather(location: str) -> str:
+    """
+    Adds message to RabbitMQ to be processed.
+    :parama location: location name ex. Ljubljana
+    :returns: uuid to be used to get results
+    """
     corr_id: str = str(uuid.uuid4())
     channel.basic_publish(
         exchange="weather",
@@ -30,6 +35,12 @@ def weather(location: str) -> str:
 
 @app.route("/weather/results/<uuid>")
 def weather_results(uuid: str) -> Response | dict:
+    """
+    Endpoint checks if the reuqest with uuid was processed
+    and returns the results in case it was.
+    :param uuid: uuid returned from /weather endpoint to identify the result
+    :returns: Weather data for location or 404 of data no present in RabbitMQ
+    """
     _, _, body = channel.basic_get(queue=uuid, auto_ack=True)
     if body is None:
         return Response("Page not found", status=404)
