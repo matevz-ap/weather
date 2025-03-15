@@ -15,6 +15,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: always
   valkey:
     container_name: "valkey"
     image: docker.io/bitnami/valkey:8.0
@@ -27,6 +28,7 @@ services:
       - 'valkey_data:/bitnami/valkey/data'
     networks:
       - valkey_net
+    restart: always
   web:
     build:
       dockerfile: build/Dockerfile
@@ -41,6 +43,7 @@ services:
     networks:
       - rabbitmq_go_net
       - valkey_net
+    restart: always
   flask:
     build:
       context: ./test
@@ -50,6 +53,7 @@ services:
       - web
     networks:
       - rabbitmq_go_net
+    restart: always
 
 volumes:
   valkey_data:
