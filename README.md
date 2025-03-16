@@ -14,8 +14,8 @@ Providing location (ex. Ljubljana), returns uuid that can be used to get the res
 ### 2. /weather/stress/{amount}
 Provide amount off messages you want to emit to queue. Receive a list of result ids
 
-### 2. /weather/results/{uuid}
+### 3. /weather/results/{uuid}
 Providing an uuid, returns wether results from location.
 
-### 3. /metrics
+### 4. /metrics
 Returns basic metrics from RabbitMQ
